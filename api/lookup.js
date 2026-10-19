@@ -3,7 +3,9 @@
 // so people can see whether others have already reported it. Only runs when the person taps the button.
 
 const PER_IP_PER_HOUR = 6;
+const PER_DAY = 25; // the free SerpApi plan has 250 searches a month
 const seenIp = new Map();
+let day = { date: '', count: 0 };
 const cache = new Map(); // q -> { at, body }; saves searches on the free plan
 
 export default async function handler(req, res) {
@@ -19,6 +21,10 @@ export default async function handler(req, res) {
   const now = Date.now();
   const recent = (seenIp.get(ip) || []).filter((t) => now - t < 3600e3);
   if (recent.length >= PER_IP_PER_HOUR) return res.status(429).json({ error: 'slow_down' });
+  const today = new Date(now).toISOString().slice(0, 10);
+  if (day.date !== today) day = { date: today, count: 0 };
+  if (day.count >= PER_DAY) return res.status(429).json({ error: 'lookup_busy' });
+  day.count++;
   seenIp.set(ip, [...recent, now]);
 
   const params = new URLSearchParams({

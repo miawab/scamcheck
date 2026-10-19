@@ -6,3 +6,6 @@ CLAUDE.md
 notes/
 samples/private/
 data/pk-sms-unlicensed/
+
+.vercel
+.env*

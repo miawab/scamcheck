@@ -1,0 +1,8 @@
+.env
+.env.*
+CLAUDE.md
+data/
+test/
+scripts/
+notes/
+samples/
