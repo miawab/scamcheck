@@ -9,3 +9,4 @@ data/pk-sms-unlicensed/
 
 .vercel
 .env*
+data/results/

@@ -27,7 +27,7 @@ function csv(text) {
   return rest.filter((r) => r.length === head.length).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]])));
 }
 
-const SETS = {
+export const SETS = {
   zenodo: () => JSON.parse(fs.readFileSync('data/zenodo-21810885/messages.json', 'utf8'))
     .map((r) => ({ text: r.Raw_text, scam: r.Labels === '1', kind: r.Source_Type })),
   'pk-sms': () => csv(fs.readFileSync('data/pk-sms-unlicensed/Pakistan_sms_dataset.csv', 'utf8'))
@@ -42,7 +42,7 @@ const showMisses = process.argv.includes('--misses');
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7);
 const pct = (n, d) => (d ? ((100 * n) / d).toFixed(1) : '-') + '%';
 
-for (const [name, load] of Object.entries(SETS)) {
+if (process.argv[1].endsWith('eval_rules.mjs')) for (const [name, load] of Object.entries(SETS)) {
   if (only && name !== only) continue;
   let rows;
   try { rows = load(); } catch { console.log(`\n${name}: not downloaded, skipped`); continue; }
