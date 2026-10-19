@@ -2,6 +2,8 @@
 // The browser already hid phone numbers, CNICs and account numbers before sending.
 // Gemma (open-weight) explains the message; we keep only flags it quotes word for word from the message.
 
+import * as trace from './_tracing.js';
+
 // Two ways to reach the same open-weight model family:
 //   GEMINI_API_KEY  -> Gemma 4 hosted on Google AI Studio (the public site)
 //   OLLAMA_URL      -> Gemma 4 running locally through Ollama (development, or fully offline use)
@@ -46,18 +48,45 @@ export default async function handler(req, res) {
     ? `A simple keyword check already noticed: ${hits.slice(0, 12).join(', ')}. Use it as a hint, not proof.`
     : 'A simple keyword check found no warning signs. Look carefully anyway.';
 
-  try {
-    const raw = await ask(SYSTEM_PROMPT.replace('LANGUAGE', language), `${ruleNote}\n\nMessage:\n"""\n${text}\n"""`);
-    return res.status(200).json(clean(parse(raw), text));
-  } catch (e) {
-    console.error('gemma', e.name, e.message);
-    return res.status(502).json({ error: e.status === 429 ? 'ai_busy' : 'ai_error' });
-  }
+  const [status, body] = await trace.agent('scamcheck', text, async (run) => {
+    await trace.tool('scamcheck', 'rule_check', 'Keyword rules for Pakistani scams, run in the browser', { hits }, () => {});
+    try {
+      const raw = await ask(SYSTEM_PROMPT.replace('LANGUAGE', language), `${ruleNote}\n\nMessage:\n"""\n${text}\n"""`, 'scamcheck');
+      const parsed = parse(raw);
+      const out = clean(parsed, text);
+      run.setAttributes({
+        'gen_ai.output.messages': trace.outputMessages(JSON.stringify(out)),
+        'scamcheck.verdict': out.verdict,
+        'scamcheck.rule_hits': (hits || []).length,
+        'scamcheck.quotes_dropped': (Array.isArray(parsed.flags) ? parsed.flags.length : 0) - out.flags.length,
+      });
+      return [200, out];
+    } catch (e) {
+      console.error('gemma', e.name, e.message);
+      trace.failed(e);
+      return [502, { error: e.status === 429 ? 'ai_busy' : 'ai_error' }];
+    }
+  });
+  await trace.flush();
+  return res.status(status).json(body);
 }
 
 export const aiOn = () => Boolean(process.env.GEMINI_API_KEY || OLLAMA);
 
-export async function ask(system, user) {
+// agentName: which agent run this call belongs to, for tracing.
+export function ask(system, user, agentName = 'scamcheck') {
+  return trace.chat(agentName, OLLAMA ? 'ollama' : 'gcp.gemini', MODEL, user, async (span) => {
+    const { text, inTokens, outTokens } = await callModel(system, user);
+    span.setAttributes({
+      'gen_ai.usage.input_tokens': inTokens || 0,
+      'gen_ai.usage.output_tokens': outTokens || 0,
+      'gen_ai.output.messages': trace.outputMessages(text),
+    });
+    return text;
+  });
+}
+
+async function callModel(system, user) {
   if (OLLAMA) {
     const r = await fetch(`${OLLAMA}/api/chat`, {
       method: 'POST',
@@ -72,7 +101,8 @@ export async function ask(system, user) {
       signal: AbortSignal.timeout(120000),
     });
     if (!r.ok) throw Object.assign(new Error(`ollama ${r.status}`), { status: r.status });
-    return (await r.json()).message?.content || '';
+    const data = await r.json();
+    return { text: data.message?.content || '', inTokens: data.prompt_eval_count, outTokens: data.eval_count };
   }
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
     method: 'POST',
@@ -86,7 +116,11 @@ export async function ask(system, user) {
   });
   if (!r.ok) throw Object.assign(new Error(`gemini ${r.status}: ${(await r.text()).slice(0, 200)}`), { status: r.status });
   const data = await r.json();
-  return (data.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
+  return {
+    text: (data.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join(''),
+    inTokens: data.usageMetadata?.promptTokenCount,
+    outTokens: data.usageMetadata?.candidatesTokenCount,
+  };
 }
 
 function parse(raw) {

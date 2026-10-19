@@ -3,6 +3,7 @@
 // so people can see whether others have already reported it. Only runs when the person taps the button.
 // Gemma then reads the results and says in one line what they show, citing nothing it wasn't given.
 import { ask, aiOn } from './check.js';
+import * as trace from './_tracing.js';
 
 const PER_IP_PER_HOUR = 6;
 const PER_DAY = 25; // the free SerpApi plan has 250 searches a month
@@ -38,25 +39,32 @@ export default async function handler(req, res) {
     num: '8',
     api_key: process.env.SERPAPI_KEY,
   });
-  try {
-    const r = await fetch(`https://serpapi.com/search.json?${params}`, { signal: AbortSignal.timeout(30000) });
-    if (!r.ok) {
-      console.error('serpapi', r.status, (await r.text()).slice(0, 200));
-      return res.status(502).json({ error: r.status === 429 ? 'lookup_busy' : 'lookup_error' });
+  const [status, out] = await trace.agent('scamcheck-lookup', q, async (run) => {
+    try {
+      const body = await trace.tool('scamcheck-lookup', 'web_search', 'Google results via SerpApi for the number or site plus "scam"', { q }, async (span) => {
+        const r = await fetch(`https://serpapi.com/search.json?${params}`, { signal: AbortSignal.timeout(30000) });
+        if (!r.ok) throw Object.assign(new Error(`serpapi ${r.status}: ${(await r.text()).slice(0, 200)}`), { status: r.status });
+        const data = await r.json();
+        const results = (data.organic_results || [])
+          .filter((o) => mentions(`${o.title} ${o.snippet || ''}`, q))
+          .slice(0, 5)
+          .map((o) => ({ title: o.title, link: o.link, snippet: o.snippet || '', source: o.source || new URL(o.link).hostname }));
+        span.setAttributes({ 'scamcheck.results_raw': (data.organic_results || []).length, 'scamcheck.results_kept': results.length });
+        return { q, results, searched: data.search_metadata?.created_at || null };
+      });
+      const entry = { at: now, body, read: {} };
+      cache.set(q, entry);
+      const read = await readResults(entry, lang);
+      run.setAttributes({ 'scamcheck.results': body.results.length, 'scamcheck.reported': read?.reported || 'none' });
+      return [200, { ...body, read }];
+    } catch (e) {
+      console.error('serpapi', e.name, e.message);
+      trace.failed(e);
+      return [502, { error: e.status === 429 ? 'lookup_busy' : 'lookup_error' }];
     }
-    const data = await r.json();
-    const results = (data.organic_results || [])
-      .filter((o) => mentions(`${o.title} ${o.snippet || ''}`, q))
-      .slice(0, 5)
-      .map((o) => ({ title: o.title, link: o.link, snippet: o.snippet || '', source: o.source || new URL(o.link).hostname }));
-    const body = { q, results, searched: data.search_metadata?.created_at || null };
-    const entry = { at: now, body, read: {} };
-    cache.set(q, entry);
-    return res.status(200).json({ ...body, read: await readResults(entry, lang) });
-  } catch (e) {
-    console.error('serpapi', e.name, e.message);
-    return res.status(502).json({ error: 'lookup_error' });
-  }
+  });
+  await trace.flush();
+  return res.status(status).json(out);
 }
 
 // One plain sentence on what the search results say, from the results alone. Cached per language.
@@ -73,6 +81,7 @@ Reply with JSON only: {"reported": "yes" | "no" | "unclear", "summary": one or t
 "yes" only if the results themselves say people reported THIS number or site as a scam or fake. Say what kind of scam if they say it.
 Use only what the results say. Do not add advice, phone numbers or links.`,
       `Search: "${q}" scam\n\nResults:\n${list}`,
+      'scamcheck-lookup',
     );
     const out = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
     const read = {

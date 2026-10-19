@@ -2,5 +2,10 @@
   "name": "scamcheck",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test test/*.test.mjs" }
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@sentry/node": "11.8.0"
+  }
 }
