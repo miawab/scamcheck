@@ -168,7 +168,9 @@ function draw({ text, rules, ai, aiError }) {
   $('want').textContent = ai?.want || '';
 
   // Highlight the phrases the rules matched and the AI quoted.
-  const phrases = [...rules.hits.flatMap((h) => h.matches), ...(ai?.flags || []).map((f) => f.quote)];
+  // The AI saw "[MOBILE NUMBER]" where the real number was, so highlight the pieces around it.
+  const aiPieces = (ai?.flags || []).flatMap((f) => f.quote.split(/\[(?:MOBILE NUMBER|CNIC|ACCOUNT NUMBER)\]/).map((p) => p.trim()));
+  const phrases = [...rules.hits.flatMap((h) => h.matches), ...aiPieces];
   $('marked').innerHTML = highlight(text, phrases);
 
   const items = [];

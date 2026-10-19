@@ -2,7 +2,11 @@
 // The browser already hid phone numbers, CNICs and account numbers before sending.
 // Gemma (open-weight) explains the message; we keep only flags it quotes word for word from the message.
 
-const MODEL = process.env.GEMMA_MODEL || 'gemma-4-26b-a4b-it';
+// Two ways to reach the same open-weight model family:
+//   GEMINI_API_KEY  -> Gemma 4 hosted on Google AI Studio (the public site)
+//   OLLAMA_URL      -> Gemma 4 running locally through Ollama (development, or fully offline use)
+const OLLAMA = process.env.OLLAMA_URL;
+const MODEL = process.env.GEMMA_MODEL || (OLLAMA ? 'gemma4:e4b-it-qat' : 'gemma-4-26b-a4b-it');
 const MAX_CHARS = 1500;
 const PER_IP_PER_HOUR = 20;
 const seen = new Map(); // ip -> [timestamps]; resets when the function goes cold, which is fine for a demo
@@ -29,7 +33,7 @@ export default async function handler(req, res) {
   const { text, lang, hits } = req.body || {};
   if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'empty' });
   if (text.length > MAX_CHARS) return res.status(400).json({ error: 'too_long' });
-  if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'ai_off' });
+  if (!process.env.GEMINI_API_KEY && !OLLAMA) return res.status(503).json({ error: 'ai_off' });
 
   const ip = (req.headers['x-forwarded-for'] || '').split(',')[0] || 'local';
   const now = Date.now();
@@ -43,27 +47,44 @@ export default async function handler(req, res) {
     : 'A simple keyword check found no warning signs. Look carefully anyway.';
 
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM.replace('LANGUAGE', language) }] },
-        contents: [{ role: 'user', parts: [{ text: `${ruleNote}\n\nMessage:\n"""\n${text}\n"""` }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 700 },
-      }),
-      signal: AbortSignal.timeout(25000),
-    });
-    if (!r.ok) {
-      console.error('gemma', r.status, (await r.text()).slice(0, 300));
-      return res.status(502).json({ error: r.status === 429 ? 'ai_busy' : 'ai_error' });
-    }
-    const data = await r.json();
-    const raw = (data.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
+    const raw = await ask(SYSTEM.replace('LANGUAGE', language), `${ruleNote}\n\nMessage:\n"""\n${text}\n"""`);
     return res.status(200).json(clean(parse(raw), text));
   } catch (e) {
     console.error('gemma', e.name, e.message);
-    return res.status(502).json({ error: 'ai_error' });
+    return res.status(502).json({ error: e.status === 429 ? 'ai_busy' : 'ai_error' });
   }
+}
+
+export async function ask(system, user) {
+  if (OLLAMA) {
+    const r = await fetch(`${OLLAMA}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL,
+        stream: false,
+        format: 'json',
+        options: { temperature: 0.2, num_predict: 700 },
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      }),
+      signal: AbortSignal.timeout(120000),
+    });
+    if (!r.ok) throw Object.assign(new Error(`ollama ${r.status}`), { status: r.status });
+    return (await r.json()).message?.content || '';
+  }
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 700 },
+    }),
+    signal: AbortSignal.timeout(25000),
+  });
+  if (!r.ok) throw Object.assign(new Error(`gemini ${r.status}: ${(await r.text()).slice(0, 200)}`), { status: r.status });
+  const data = await r.json();
+  return (data.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
 }
 
 function parse(raw) {
