@@ -27,6 +27,7 @@ const T = {
     disagree: 'The keyword check and the AI did not agree, so we show the more careful answer.',
     by_ai: 'Explained by Gemma, an open-weight AI model. It can make mistakes.',
     empty: 'Paste a message first.',
+    speak: 'Read aloud',
     lookup: 'Has anyone reported it?',
     lookup_hint: 'Search the web for this number or website. Only what you tap is searched.',
     search: (q) => `Search ${q}`,
@@ -72,6 +73,7 @@ const T = {
     disagree: 'رول چیک اور اے آئی کا جواب مختلف تھا، اس لیے زیادہ محتاط جواب دکھایا گیا ہے۔',
     by_ai: 'وضاحت Gemma نے کی ہے، جو ایک اوپن ویٹ اے آئی ماڈل ہے۔ اس سے غلطی ہو سکتی ہے۔',
     empty: 'پہلے میسج پیسٹ کریں۔',
+    speak: 'سن کر سمجھیں',
     lookup: 'کیا کسی نے اس کی شکایت کی ہے؟',
     lookup_hint: 'یہ نمبر یا ویب سائٹ انٹرنیٹ پر تلاش کریں۔ صرف وہی تلاش ہوگا جس پر آپ ٹیپ کریں گے۔',
     search: (q) => `تلاش کریں: ${q}`,
@@ -217,6 +219,7 @@ function draw({ text, rules, ai, aiError }) {
   }));
 
   drawLookup();
+  $('speak').hidden = !voiceFor(lang);
 
   const notes = [];
   if (aiError) notes.push(t[aiError]);
@@ -224,6 +227,28 @@ function draw({ text, rules, ai, aiError }) {
   if (aiLevel && Math.abs(LEVEL[aiLevel] - LEVEL[rules.level]) === 2) notes.push(t.disagree);
   $('ai-note').textContent = notes.join(' ');
 }
+
+// Read the answer aloud with the phone's own voice, for people who find reading hard.
+function voiceFor(l) {
+  if (!('speechSynthesis' in window)) return null;
+  const want = l === 'ur' ? /^ur/i : /^en/i;
+  const voices = speechSynthesis.getVoices().filter((v) => want.test(v.lang));
+  return voices.find((v) => /PK|IN/i.test(v.lang)) || voices[0] || null;
+}
+if ('speechSynthesis' in window) speechSynthesis.addEventListener?.('voiceschanged', () => { if (last) $('speak').hidden = !voiceFor(lang); });
+
+$('speak').addEventListener('click', () => {
+  const b = $('speak');
+  if (speechSynthesis.speaking) { speechSynthesis.cancel(); b.setAttribute('aria-pressed', 'false'); return; }
+  const parts = [$('verdict').innerText, $('want-block').hidden ? '' : $('want').innerText, ...[...$('steps').children].map((li) => li.innerText)];
+  const u = new SpeechSynthesisUtterance(parts.filter(Boolean).join('. '));
+  u.voice = voiceFor(lang);
+  u.lang = u.voice?.lang || (lang === 'ur' ? 'ur-PK' : 'en-US');
+  u.rate = 0.9;
+  u.onend = u.onerror = () => b.setAttribute('aria-pressed', 'false');
+  b.setAttribute('aria-pressed', 'true');
+  speechSynthesis.speak(u);
+});
 
 // Phone numbers and websites in the message that are worth searching for.
 function targets(text) {
