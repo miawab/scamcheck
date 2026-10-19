@@ -46,6 +46,7 @@ export default async function handler(req, res) {
         if (!r.ok) throw Object.assign(new Error(`serpapi ${r.status}: ${(await r.text()).slice(0, 200)}`), { status: r.status });
         const data = await r.json();
         const results = (data.organic_results || [])
+          .filter((o) => /^https?:\/\//i.test(o.link || '')) // never pass on javascript: or data: links
           .filter((o) => mentions(`${o.title} ${o.snippet || ''}`, q))
           .slice(0, 5)
           .map((o) => ({ title: o.title, link: o.link, snippet: o.snippet || '', source: o.source || new URL(o.link).hostname }));
