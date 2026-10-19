@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>scamcheck: is this message a scam?</title>
+  <meta name="description" content="Paste a suspicious SMS or WhatsApp message and get a plain answer in English or Urdu.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Nastaliq+Urdu:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 5 7v8c0 7 5 12 11 14 6-2 11-7 11-14V7z' fill='%230f766e'/%3E%3Cpath d='m11 16 4 4 7-8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 5 7v8c0 7 5 12 11 14 6-2 11-7 11-14V7z"/><path class="tick" d="m11 16 4 4 7-8"/></svg>
+      <span>scamcheck</span>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">English</button>
+      <button type="button" data-lang="ur" aria-pressed="false" lang="ur">اردو</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="ask">
+      <h1 data-t="title"></h1>
+      <p class="sub" data-t="sub"></p>
+
+      <label for="msg" class="label" data-t="label"></label>
+      <textarea id="msg" rows="6" maxlength="1500" data-ph="placeholder"></textarea>
+      <div class="row">
+        <button id="go" class="go" type="button" data-t="check"></button>
+        <span class="count" id="count">0 / 1500</span>
+      </div>
+      <p class="privacy" data-t="privacy"></p>
+
+      <div class="examples">
+        <span data-t="try"></span>
+        <div id="examples" class="chips"></div>
+      </div>
+    </section>
+
+    <section id="result" class="result" hidden aria-live="polite">
+      <div id="verdict" class="verdict"></div>
+      <div class="block" id="want-block" hidden>
+        <h2 data-t="want"></h2>
+        <p id="want"></p>
+      </div>
+      <div class="block">
+        <h2 data-t="message"></h2>
+        <blockquote id="marked"></blockquote>
+      </div>
+      <div class="block" id="flags-block" hidden>
+        <h2 data-t="signs"></h2>
+        <ul id="flags" class="flags"></ul>
+      </div>
+      <div class="block">
+        <h2 data-t="todo"></h2>
+        <ol id="steps" class="steps"></ol>
+        <details class="help">
+          <summary data-t="helplines"></summary>
+          <ul id="helplines"></ul>
+        </details>
+      </div>
+      <p id="ai-note" class="note"></p>
+      <p class="note strong" data-t="limits"></p>
+    </section>
+  </main>
+
+  <footer>
+    <p data-t="footer"></p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
