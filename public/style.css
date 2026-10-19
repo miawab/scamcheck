@@ -163,6 +163,12 @@ mark { background: var(--mark); color: inherit; border-radius: 4px; padding: 0 2
 .help ul { margin: 6px 0 0; padding-inline-start: 22px; }
 .help a { color: var(--brand); }
 
+.hint { color: var(--muted); font-size: 15px; margin: 0 0 10px; }
+.found { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+.found a { color: var(--brand); font-weight: 600; overflow-wrap: anywhere; }
+.found small { display: block; color: var(--muted); }
+.found p { font-size: 15px; margin: 2px 0 0; }
+
 .note { color: var(--muted); font-size: 15px; margin: 16px 0 0; }
 .note.strong { color: var(--ink); font-weight: 600; }
 

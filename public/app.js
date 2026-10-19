@@ -27,6 +27,13 @@ const T = {
     disagree: 'The keyword check and the AI did not agree, so we show the more careful answer.',
     by_ai: 'Explained by Gemma, an open-weight AI model. It can make mistakes.',
     empty: 'Paste a message first.',
+    lookup: 'Has anyone reported it?',
+    lookup_hint: 'Search the web for this number or website. Only what you tap is searched.',
+    search: (q) => `Search ${q}`,
+    searching: 'Searching…',
+    found: (n) => (n === 1 ? '1 page mentions it next to the word "scam":' : `${n} pages mention it next to the word "scam":`),
+    nothing: 'Nothing found online. That does not prove it is safe: scammers change numbers often.',
+    lookup_fail: 'The search did not work right now. Try again later.',
     defaultSteps: {
       high: ['Do not reply, call back or click any link in it.', 'Never share an OTP, PIN, password or CNIC.', 'Block the number and report it (see helplines below).'],
       medium: ['Do not send money or codes yet.', 'Call the official helpline yourself (not a number from the message) to check.', 'Ask someone you trust.'],
@@ -65,6 +72,13 @@ const T = {
     disagree: 'رول چیک اور اے آئی کا جواب مختلف تھا، اس لیے زیادہ محتاط جواب دکھایا گیا ہے۔',
     by_ai: 'وضاحت Gemma نے کی ہے، جو ایک اوپن ویٹ اے آئی ماڈل ہے۔ اس سے غلطی ہو سکتی ہے۔',
     empty: 'پہلے میسج پیسٹ کریں۔',
+    lookup: 'کیا کسی نے اس کی شکایت کی ہے؟',
+    lookup_hint: 'یہ نمبر یا ویب سائٹ انٹرنیٹ پر تلاش کریں۔ صرف وہی تلاش ہوگا جس پر آپ ٹیپ کریں گے۔',
+    search: (q) => `تلاش کریں: ${q}`,
+    searching: 'تلاش ہو رہی ہے…',
+    found: (n) => `${n} صفحات میں اس کا ذکر "دھوکے" کے ساتھ ہے:`,
+    nothing: 'انٹرنیٹ پر کچھ نہیں ملا۔ اس سے یہ ثابت نہیں ہوتا کہ یہ محفوظ ہے: دھوکے باز اکثر نمبر بدلتے رہتے ہیں۔',
+    lookup_fail: 'ابھی تلاش نہیں ہو سکی۔ بعد میں دوبارہ کوشش کریں۔',
     defaultSteps: {
       high: ['جواب نہ دیں، واپس کال نہ کریں، کوئی لنک نہ کھولیں۔', 'OTP، پن، پاس ورڈ یا شناختی کارڈ نمبر کبھی نہ بتائیں۔', 'نمبر بلاک کریں اور رپورٹ کریں (نیچے ہیلپ لائنز دیکھیں)۔'],
       medium: ['ابھی پیسے یا کوڈ نہ بھیجیں۔', 'خود آفیشل ہیلپ لائن پر کال کر کے تصدیق کریں (میسج والے نمبر پر نہیں)۔', 'کسی بھروسے والے شخص سے پوچھیں۔'],
@@ -202,11 +216,82 @@ function draw({ text, rules, ai, aiError }) {
     return li;
   }));
 
+  drawLookup();
+
   const notes = [];
   if (aiError) notes.push(t[aiError]);
   if (ai) notes.push(t.by_ai);
   if (aiLevel && Math.abs(LEVEL[aiLevel] - LEVEL[rules.level]) === 2) notes.push(t.disagree);
   $('ai-note').textContent = notes.join(' ');
+}
+
+// Phone numbers and websites in the message that are worth searching for.
+function targets(text) {
+  const out = new Set();
+  for (const m of text.matchAll(/(?:\+?92[\s-]?|\b0)3\d{2}[\s-]?\d{7}\b|\b3[0-4]\d{8}\b/g)) {
+    const d = m[0].replace(/\D/g, '').replace(/^92/, '').replace(/^0/, '');
+    out.add(`0${d}`);
+  }
+  const tld = 'com|pk|net|org|info|xyz|top|cc|men|site|online|live|shop|click|vip|icu|buzz|me|co|io|app|link|page|store|club|win|biz';
+  for (const m of text.matchAll(new RegExp(`\\b(?:https?:\\/\\/)?(?:www\\.)?((?:[a-z0-9-]+\\.)+(?:${tld}))(?=[\\/\\s?#.,)]|$)`, 'gi'))) {
+    const d = m[1].toLowerCase();
+    if (!/^(wa\.me|bit\.ly|tinyurl\.com|t\.ly|cutt\.ly)$/.test(d) && !/^\d/.test(d)) out.add(d);
+  }
+  return [...out].slice(0, 3);
+}
+
+function drawLookup() {
+  const t = T[lang];
+  const list = targets(last.text);
+  last.lookups ||= {};
+  $('lookup-block').hidden = !list.length;
+  $('lookup-buttons').replaceChildren(...list.map((q) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.dir = 'auto';
+    b.textContent = last.lookups[q] === 'loading' ? t.searching : t.search(q);
+    b.disabled = last.lookups[q] === 'loading';
+    b.addEventListener('click', () => lookup(q));
+    return b;
+  }));
+  const out = $('lookup-out');
+  out.replaceChildren();
+  for (const q of list) {
+    const r = last.lookups[q];
+    if (!r || r === 'loading') continue;
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.style.marginTop = '12px';
+    if (r === 'error') { p.textContent = `${q}: ${t.lookup_fail}`; out.append(p); continue; }
+    p.textContent = `${q}: ${r.results.length ? t.found(r.results.length) : t.nothing}`;
+    out.append(p);
+    if (!r.results.length) continue;
+    const ul = document.createElement('ul');
+    ul.className = 'found';
+    for (const x of r.results) {
+      const li = document.createElement('li');
+      const a = Object.assign(document.createElement('a'), { href: x.link, textContent: x.title, target: '_blank', rel: 'noopener noreferrer nofollow' });
+      const s = Object.assign(document.createElement('small'), { textContent: x.source });
+      const sn = Object.assign(document.createElement('p'), { textContent: x.snippet });
+      li.append(a, s, sn);
+      ul.append(li);
+    }
+    out.append(ul);
+  }
+}
+
+async function lookup(q) {
+  const mine = last;
+  mine.lookups[q] = 'loading';
+  drawLookup();
+  try {
+    const r = await fetch('/api/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q }) });
+    mine.lookups[q] = r.ok ? await r.json() : 'error';
+  } catch {
+    mine.lookups[q] = 'error';
+  }
+  if (last === mine) drawLookup();
 }
 
 function highlight(text, phrases) {

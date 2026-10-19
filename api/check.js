@@ -11,7 +11,7 @@ const MAX_CHARS = 1500;
 const PER_IP_PER_HOUR = 20;
 const seen = new Map(); // ip -> [timestamps]; resets when the function goes cold, which is fine for a demo
 
-const SYSTEM = `You help people in Pakistan decide whether an SMS or WhatsApp message is a scam.
+export const SYSTEM_PROMPT = `You help people in Pakistan decide whether an SMS or WhatsApp message is a scam.
 Common scams there: fake BISP/Ehsaas payments asking for a fee, fake JazzCash/Easypaisa "account blocked" messages asking for a code, "I sent money by mistake, send it back", fake courier fees, prize/lucky draw messages, "work from home" task jobs, requests for CNIC or card details.
 Phone numbers, CNICs and account numbers were replaced with [MOBILE NUMBER], [CNIC], [ACCOUNT NUMBER] for privacy.
 
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     : 'A simple keyword check found no warning signs. Look carefully anyway.';
 
   try {
-    const raw = await ask(SYSTEM.replace('LANGUAGE', language), `${ruleNote}\n\nMessage:\n"""\n${text}\n"""`);
+    const raw = await ask(SYSTEM_PROMPT.replace('LANGUAGE', language), `${ruleNote}\n\nMessage:\n"""\n${text}\n"""`);
     return res.status(200).json(clean(parse(raw), text));
   } catch (e) {
     console.error('gemma', e.name, e.message);
