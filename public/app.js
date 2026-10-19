@@ -114,6 +114,7 @@ function setLang(l) {
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = T[l][el.dataset.t];
   for (const el of document.querySelectorAll('[data-ph]')) el.placeholder = T[l][el.dataset.ph];
   if (!go.disabled) go.textContent = T[l].check;
+  drawExamples();
   if (last) draw(last);
 }
 
@@ -123,14 +124,26 @@ for (const b of document.querySelectorAll('.lang button')) b.addEventListener('c
   if (last?.ai) run();
 });
 
-for (const ex of EXAMPLES) {
-  const c = document.createElement('button');
-  c.type = 'button';
-  c.className = 'chip';
-  c.textContent = ex.label;
-  if (/[؀-ۿ]/.test(ex.label)) c.lang = 'ur';
-  c.addEventListener('click', () => { msg.value = ex.text; count(); run(); });
-  $('examples').append(c);
+// A short pick of the examples for the page; tests use all of them.
+const CHIPS = {
+  bisp: 'بی آئی ایس پی',
+  jazzcash_otp: 'جاز کیش بلاک',
+  mistake: 'غلطی سے بھیجے',
+  echallan: 'ای چالان',
+  whatsapp_code: 'واٹس ایپ کوڈ',
+  urdu_prize: 'انعام',
+  real_otp: 'اصلی بینک OTP',
+  friend: 'عام میسج',
+};
+function drawExamples() {
+  $('examples').replaceChildren(...EXAMPLES.filter((ex) => CHIPS[ex.id]).map((ex) => {
+    const c = document.createElement('button');
+    c.type = 'button';
+    c.className = 'chip';
+    c.textContent = lang === 'ur' ? CHIPS[ex.id] : ex.label.replace(' (Urdu)', ' (اردو)');
+    c.addEventListener('click', () => { msg.value = ex.text; count(); run(); });
+    return c;
+  }));
 }
 
 function count() { $('count').textContent = `${msg.value.length} / 1500`; }
