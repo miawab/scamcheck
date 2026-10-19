@@ -35,6 +35,7 @@ const T = {
     found: (n) => (n === 1 ? '1 page mentions it next to the word "scam":' : `${n} pages mention it next to the word "scam":`),
     nothing: 'Nothing found online. That does not prove it is safe: scammers change numbers often.',
     lookup_fail: 'The search did not work right now. Try again later.',
+    read_label: 'Gemma read these pages: ',
     defaultSteps: {
       high: ['Do not reply, call back or click any link in it.', 'Never share an OTP, PIN, password or CNIC.', 'Block the number and report it (see helplines below).'],
       medium: ['Do not send money or codes yet.', 'Call the official helpline yourself (not a number from the message) to check.', 'Ask someone you trust.'],
@@ -81,6 +82,7 @@ const T = {
     found: (n) => `${n} صفحات میں اس کا ذکر "دھوکے" کے ساتھ ہے:`,
     nothing: 'انٹرنیٹ پر کچھ نہیں ملا۔ اس سے یہ ثابت نہیں ہوتا کہ یہ محفوظ ہے: دھوکے باز اکثر نمبر بدلتے رہتے ہیں۔',
     lookup_fail: 'ابھی تلاش نہیں ہو سکی۔ بعد میں دوبارہ کوشش کریں۔',
+    read_label: 'Gemma نے یہ صفحات پڑھے: ',
     defaultSteps: {
       high: ['جواب نہ دیں، واپس کال نہ کریں، کوئی لنک نہ کھولیں۔', 'OTP، پن، پاس ورڈ یا شناختی کارڈ نمبر کبھی نہ بتائیں۔', 'نمبر بلاک کریں اور رپورٹ کریں (نیچے ہیلپ لائنز دیکھیں)۔'],
       medium: ['ابھی پیسے یا کوڈ نہ بھیجیں۔', 'خود آفیشل ہیلپ لائن پر کال کر کے تصدیق کریں (میسج والے نمبر پر نہیں)۔', 'کسی بھروسے والے شخص سے پوچھیں۔'],
@@ -292,6 +294,13 @@ function drawLookup() {
     p.textContent = `${q}: ${r.results.length ? t.found(r.results.length) : t.nothing}`;
     out.append(p);
     if (!r.results.length) continue;
+    if (r.read?.summary) {
+      const box = document.createElement('div');
+      box.className = `read ${r.read.reported}`;
+      const b = Object.assign(document.createElement('b'), { textContent: t.read_label });
+      box.append(b, document.createTextNode(r.read.summary));
+      out.append(box);
+    }
     const ul = document.createElement('ul');
     ul.className = 'found';
     for (const x of r.results) {
@@ -311,7 +320,7 @@ async function lookup(q) {
   mine.lookups[q] = 'loading';
   drawLookup();
   try {
-    const r = await fetch('/api/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q }) });
+    const r = await fetch('/api/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q, lang }) });
     mine.lookups[q] = r.ok ? await r.json() : 'error';
   } catch {
     mine.lookups[q] = 'error';

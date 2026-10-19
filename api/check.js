@@ -55,6 +55,8 @@ export default async function handler(req, res) {
   }
 }
 
+export const aiOn = () => Boolean(process.env.GEMINI_API_KEY || OLLAMA);
+
 export async function ask(system, user) {
   if (OLLAMA) {
     const r = await fetch(`${OLLAMA}/api/chat`, {

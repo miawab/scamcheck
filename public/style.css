@@ -183,6 +183,9 @@ mark { background: var(--mark); color: inherit; border-radius: 4px; padding: 0 2
 .help a { color: var(--brand); }
 
 .hint { color: var(--muted); font-size: 15px; margin: 0 0 10px; }
+.read { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: var(--mid-bg); }
+.read.yes { background: var(--high-bg); }
+.read b { color: var(--ink); }
 .found { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
 .found a { color: var(--brand); font-weight: 600; overflow-wrap: anywhere; }
 .found small { display: block; color: var(--muted); }

@@ -1,6 +1,8 @@
-// POST { q } -> { q, results: [{ title, link, snippet, source }] }
-// Searches Google (via SerpApi) for a phone number or website from the message, plus "scam" / "fraud",
+// POST { q, lang } -> { q, results: [{ title, link, snippet, source }], read: { reported, summary } | null }
+// Searches Google (via SerpApi) for a phone number or website from the message, plus "scam",
 // so people can see whether others have already reported it. Only runs when the person taps the button.
+// Gemma then reads the results and says in one line what they show, citing nothing it wasn't given.
+import { ask, aiOn } from './check.js';
 
 const PER_IP_PER_HOUR = 6;
 const PER_DAY = 25; // the free SerpApi plan has 250 searches a month
@@ -11,11 +13,12 @@ const cache = new Map(); // q -> { at, body }; saves searches on the free plan
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   const q = normalise(String(req.body?.q || ''));
+  const lang = req.body?.lang === 'ur' ? 'ur' : 'en';
   if (!q) return res.status(400).json({ error: 'not_a_number_or_site' });
   if (!process.env.SERPAPI_KEY) return res.status(503).json({ error: 'lookup_off' });
 
   const hit = cache.get(q);
-  if (hit && Date.now() - hit.at < 6 * 3600e3) return res.status(200).json(hit.body);
+  if (hit && Date.now() - hit.at < 6 * 3600e3) return res.status(200).json({ ...hit.body, read: await readResults(hit, lang) });
 
   const ip = (req.headers['x-forwarded-for'] || '').split(',')[0] || 'local';
   const now = Date.now();
@@ -47,11 +50,40 @@ export default async function handler(req, res) {
       .slice(0, 5)
       .map((o) => ({ title: o.title, link: o.link, snippet: o.snippet || '', source: o.source || new URL(o.link).hostname }));
     const body = { q, results, searched: data.search_metadata?.created_at || null };
-    cache.set(q, { at: now, body });
-    return res.status(200).json(body);
+    const entry = { at: now, body, read: {} };
+    cache.set(q, entry);
+    return res.status(200).json({ ...body, read: await readResults(entry, lang) });
   } catch (e) {
     console.error('serpapi', e.name, e.message);
     return res.status(502).json({ error: 'lookup_error' });
+  }
+}
+
+// One plain sentence on what the search results say, from the results alone. Cached per language.
+async function readResults(entry, lang) {
+  const { q, results } = entry.body;
+  if (!results.length || !aiOn()) return null;
+  if (entry.read[lang]) return entry.read[lang];
+  const language = lang === 'ur' ? 'Urdu (Urdu script)' : 'simple English';
+  const list = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.source}\n   ${r.snippet}`).join('\n');
+  try {
+    const raw = await ask(
+      `You summarise web search results for someone checking whether a phone number or website is a scam.
+Reply with JSON only: {"reported": "yes" | "no" | "unclear", "summary": one or two short sentences in ${language}}.
+"yes" only if the results themselves say people reported THIS number or site as a scam or fake. Say what kind of scam if they say it.
+Use only what the results say. Do not add advice, phone numbers or links.`,
+      `Search: "${q}" scam\n\nResults:\n${list}`,
+    );
+    const out = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+    const read = {
+      reported: ['yes', 'no', 'unclear'].includes(out.reported) ? out.reported : 'unclear',
+      summary: String(out.summary || '').replace(/\+?\d[\d\s-]{6,}\d/g, '').slice(0, 300),
+    };
+    entry.read[lang] = read;
+    return read;
+  } catch (e) {
+    console.error('lookup read', e.message);
+    return null;
   }
 }
 
