@@ -34,6 +34,16 @@ Scored with `node scripts/eval_rules.mjs` on labeled SMS datasets (see [`data/RE
 
 The rules were written while looking at the Zenodo set and adjusted after reading misses on the other two, so treat these as best-case numbers.
 
+**With Gemma** (`scripts/eval_ai.mjs`, local `gemma4:e4b`, a fixed random sample of 150 messages from the Pakistan SMS and UrduStack sets, half scams):
+
+| | Scams caught (*Be careful* or higher) | *Likely a scam* | False alarms |
+|---|---|---|---|
+| Rules alone | 77% | 68% | 0 of 75 |
+| Gemma alone | 99% | 84% | 0 of 75 |
+| Rules + Gemma (what the page shows) | 99% | 93% | 0 of 75 |
+
+150 messages is a small sample, and Gemma is shown the rule hits as a hint, so the two aren't fully independent.
+
 ## Run it
 
 Needs Node.js 20+.
